@@ -59,6 +59,16 @@ namespace AmazonHook
 				}
 			}
 
+			if (amazonConfig.TryGetValue("Logger", &value))
+			{
+				if (*value == oneStr)
+				{
+					freopen("logs.txt", "a", stdout);
+					printf("[AmazonHook] Logger Enabled!\n");
+				}
+			}
+
+
 			printf("[AmazonHook] Base Address = %p\n", baseAddress);
 
 			if (amazonConfig.TryGetValue("allowlocalhostnetserver", &value))
@@ -86,7 +96,7 @@ namespace AmazonHook
 
 			if (amazonConfig.TryGetValue("Wasapi", &value))
 			{
-				InjectCode((void*)(baseAddress + 0xC77D1A), { (byte)std::stoi(*value) });
+				InjectCode((void*)(baseAddress + 0xC77D1A), { 0x00 });
 			}
 
 			if (amazonConfig.TryGetValue("Force2Ch", &value))
