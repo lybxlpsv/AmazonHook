@@ -68,7 +68,6 @@ namespace AmazonHook
 				}
 			}
 
-
 			printf("[AmazonHook] Base Address = %p\n", baseAddress);
 
 			if (amazonConfig.TryGetValue("allowlocalhostnetserver", &value))
@@ -76,9 +75,10 @@ namespace AmazonHook
 				if (*value == oneStr)
 				{
 					InjectCode((void*)(baseAddress + 0x8BC180), { 0x31, 0xC0, 0xC3 });
-					InjectCode((void*)(baseAddress + 0x8BC180), { 0x55, 0x8B, 0xEC });
+					InjectCode((void*)(baseAddress + 0x164D0E0), { 0x30, 0x2F, 0x38, 0x00 });
 				}
 			}
+
 			if (amazonConfig.TryGetValue("disableshopcloselockout", &value))
 			{
 				if (*value == oneStr)
@@ -96,7 +96,7 @@ namespace AmazonHook
 
 			if (amazonConfig.TryGetValue("Wasapi", &value))
 			{
-				InjectCode((void*)(baseAddress + 0xC77D1A), { 0x00 });
+				InjectCode((void*)(baseAddress + 0xC77D1A), { (byte)std::stoi(*value) });
 			}
 
 			if (amazonConfig.TryGetValue("Force2Ch", &value))
