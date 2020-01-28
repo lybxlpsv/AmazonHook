@@ -116,6 +116,14 @@ namespace AmazonHook
 				if (*value == oneStr)
 					dxcomptea.Initialize();
 			}
+
+			if (amazonConfig.TryGetValue("FreezeSongSelectTimer", &value))
+			{
+				if (*value == oneStr)
+				{
+					InjectCode((void*)(baseAddress + 0x6FFC62), { 0xEB });
+				}
+			}
 		}
 	}
 
