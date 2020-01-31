@@ -2,7 +2,6 @@
 #include "DXComponentTea.h"
 
 #include <stdio.h>
-
 #include <chrono>
 #include <thread>
 
@@ -29,11 +28,22 @@ namespace AmazonHook::Vtea
 	typedef IDirect3D9* (WINAPI* Direct3DCreate9_t)(UINT SDKVersion);
 	typedef HRESULT(__stdcall* CreateDevice_t)(IDirect3D9* d3d9, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pPresentationParameters, IDirect3DDevice9** ppReturnedDeviceInterface);
 	typedef HRESULT(__stdcall* EndScene_t)(IDirect3DDevice9* device);
-	typedef HRESULT(__stdcall* Present_t)(IDirect3DDevice9* device, const RECT* pSourceRect, const RECT* pDestRect,	HWND hDestWindowOverride, const RGNDATA* pDirtyRegion);
+	typedef HRESULT(__stdcall* Present_t)(IDirect3DDevice9* device, const RECT* pSourceRect, const RECT* pDestRect, HWND hDestWindowOverride, const RGNDATA* pDirtyRegion);
 	typedef DWORD(__fastcall* FUN_00b700a0)(int param_1);
 	typedef DWORD(__fastcall* FUN_00b700b0)(int param_1);
+
+	//timer hax
+	typedef unsigned int(__cdecl* FUN_5C32A0)(unsigned int a1);
+	typedef int(__thiscall* FUN_6F5CD0)(__m128i *thisobj);
+	typedef int(__fastcall* FUN_00cf34b0)(void*, char*, int, int);
+
+	typedef int* (*FUN_00b69190)(int* param_1, int* param2);
 	static FUN_00b700a0 f00b700a0;
 	static FUN_00b700b0 f00b700b0;
+	static FUN_00b69190 f00b69190;
+	static FUN_00cf34b0 f00cf34b0;
+	static FUN_5C32A0 f5C32A0;
+	static FUN_6F5CD0 f6F5CD0;
 	static Direct3DCreate9_t OriginalDirect3DCreate9;
 	static CreateDevice_t OriginalCreateDevice;
 	static EndScene_t OriginalEndScene;
@@ -44,13 +54,22 @@ namespace AmazonHook::Vtea
 	static bool Windowed = false;
 	static bool Vsync = false;
 	static bool Frame = false;
+	static bool Debug = false;
+
+	float Acceleration = 4;
 
 	static int Scaling = 1;
 	static int ResWidth = 0;
 	static int ResHeight = 0;
 	static int Verbosity = 0;
-	static WNDPROC oWndProc;
+	static int RefreshRate = 60;
 
+	static WNDPROC oWndProc;
+	bool print = false;
+
+	int addresses[9999];
+	bool hookall = false;
+	static int areturn = 0x00CEDBD4;
 	DXComponentTea::DXComponentTea()
 	{
 
@@ -61,6 +80,13 @@ namespace AmazonHook::Vtea
 	{
 
 	}
+
+	void clearscr() {
+		COORD topLeft = { 0, 0 };
+		HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+		SetConsoleCursorPosition(console, topLeft);
+	}
+
 
 	void InjectCode(void* address, const std::vector<uint8_t> data)
 	{
@@ -77,24 +103,39 @@ namespace AmazonHook::Vtea
 
 	}
 
+	DWORD __fastcall FUN00cf34b0(void* param_1, char* param_1_00, int param_2, DWORD param_3)
+	{
+		printf("%s", param_1_00);
+		return f00cf34b0(param_1, param_1_00, param_2, param_3);
+	}
+
+	int f0xb691e0 = 0;
+	int f0xb691d7 = 0;
 	DWORD __fastcall FUN00b700a0(int param_1)
 	{
 		auto returnaddr = (intptr_t)_ReturnAddress() - MainModule::baseAddress + 0x400C00;
 		int after = 0;
 		after = f00b700a0(param_1);
 		if (Verbosity >= 4)
-			printf("[AmazonHook] wut a0\n %p=%d, %p, %04x\n", param_1, after, _ReturnAddress(), returnaddr);
+			printf("[AmazonHook] wut a0\n %p=%d, %p, %p\n", param_1, after, _ReturnAddress(), returnaddr);
 		if (MainModule::WindowHandle != NULL)
+		{
 			if (returnaddr == 0xb691e0)
 			{
+				//if (f0xb691e0 == 0)
+				//if (after != ResHeight)
 				if (ResHeight == 0)
 				{
 					auto winsize = MainModule::GetWindowBounds();
 					after = (int)((float)after * ((float)after / (float)winsize.y));
 				}
-				else
-					after = (int)((float)after * ((float)after / (float)ResWidth));
+				/*else
+					after = (int)((float)after * ((float)after / (float)ResHeight));*/
+				f0xb691e0++;
+				if (Verbosity >= 4)
+					printf("[AmazonHook] f0xb691e0 %d\n", f0xb691e0);
 			}
+		}
 		return after;
 	}
 
@@ -105,24 +146,44 @@ namespace AmazonHook::Vtea
 		if (Verbosity >= 4)
 			printf("[AmazonHook] wut b0\n %p=%d, %p, %p\n", param_1, after, _ReturnAddress(), returnaddr);
 		if (MainModule::WindowHandle != NULL)
+		{
 			if (returnaddr == 0xb691d7)
 			{
-				if (ResHeight == 0)
+				//if (f0xb691d7 == 0)
+					//if (after != ResWidth)
+				if (ResWidth == 0)
 				{
 					auto winsize = MainModule::GetWindowBounds();
 					after = (int)((float)after * ((float)after / (float)winsize.x));
 				}
-				else
-					after = (int)((float)after * ((float)after / (float)ResHeight));
+				/*else
+					after = (int)((float)after * ((float)after / (float)ResWidth));*/
+				f0xb691d7++;
+				if (Verbosity >= 4)
+					printf("[AmazonHook] f0xb691d7 %d\n", f0xb691d7);
 			}
+		}
 		return after;
+	}
+	static bool once = false;
+	int* FUN00b69190(int* param_1, int* param_2)
+	{
+		printf("hello");
+		auto result = f00b69190(param_1, param_2);
+		return result;
 	}
 
 	HRESULT __stdcall EndSceneHOOK(IDirect3DDevice9* device)
 	{
+		print = false;
 		//maybe for imgui later
 		if (Verbosity >= 3)
 			printf("[AmazonHook] EndScene! %p\n", _ReturnAddress());
+
+		f0xb691e0 = 0;
+		f0xb691d7 = 0;
+		//clearscr();
+		
 		return OriginalEndScene(device);
 	}
 
@@ -194,23 +255,28 @@ namespace AmazonHook::Vtea
 		return S_OK;
 	}
 
+	static RECT newrect;
+
 	HRESULT __stdcall PresentHOOK(IDirect3DDevice9* d3d9, const RECT* pSourceRect,
 		const RECT* pDestRect,
 		HWND          hDestWindowOverride,
 		const RGNDATA* pDirtyRegion
 	)
 	{
-		return OriginalPresent(d3d9, pDestRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+		auto current = MainModule::GetWindowBounds();
+		return OriginalPresent(d3d9, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
 	}
 
 	HRESULT __stdcall CreateDeviceHOOK(IDirect3D9* d3d9, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS* pp, IDirect3DDevice9** ppReturnedDeviceInterface)
 	{
+		pp->FullScreen_RefreshRateInHz = RefreshRate;
+
 		if (Windowed)
 		{
 			if (Scaling == 2)
 			{
-				pp->BackBufferWidth = 0;
-				pp->BackBufferHeight = 0;
+				//pp->BackBufferWidth = ResWidth;
+				//pp->BackBufferHeight = ResHeight;
 			}
 			else {
 				pp->BackBufferWidth = 1920;
@@ -223,7 +289,7 @@ namespace AmazonHook::Vtea
 		if (!Vsync)
 		{
 			pp->PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
-			pp->SwapEffect = D3DSWAPEFFECT_DISCARD;
+			pp->SwapEffect = D3DSWAPEFFECT_COPY;
 		}
 
 		if (Frame && Windowed)
@@ -242,7 +308,7 @@ namespace AmazonHook::Vtea
 		}
 
 		IDirect3DDevice9* device = *ppReturnedDeviceInterface;
-		
+
 		void** pVTable = *(void***)(device);
 
 		OriginalEndScene = (EndScene_t)pVTable[42];
@@ -272,6 +338,37 @@ namespace AmazonHook::Vtea
 		DetourTransactionCommit();
 		printf("[AmazonHook] Direct3DCreate9 Hooked!\n");
 		return ID3D9;
+	}
+
+	void __stdcall FSleep(DWORD miliseconds)
+	{
+		if (miliseconds > 499)
+			printf("Sleep %p %d\n", _ReturnAddress(), miliseconds);
+		OSleep(miliseconds);
+		return;
+	}
+	unsigned int __cdecl FUN5C32A0(unsigned int a1)
+	{
+		auto returnaddr = (intptr_t)_ReturnAddress() - MainModule::baseAddress + 0x400C00;
+		printf("timer??? %p \n", returnaddr);
+
+		auto returnvalue = a1 / 0x3e8;
+		printf("%d %d \n", a1, returnvalue);
+		a1 = 99;
+		returnvalue = 99;
+		return returnvalue;
+	}
+	static char** timerobjvalue = 0x00;
+	int __cdecl FUN6F5CD0(__m128i* thisobj)
+	{
+		auto returnaddr = (intptr_t)_ReturnAddress() - MainModule::baseAddress + 0x400C00;
+		return f6F5CD0(thisobj);
+	}
+
+	void print128_num(__m128i var)
+	{
+		int64_t* v64val = (int64_t*)&var;
+		printf("%.16llx %.16llx\n", v64val[1], v64val[0]);
 	}
 
 	void DXComponentTea::Initialize()
@@ -329,6 +426,19 @@ namespace AmazonHook::Vtea
 			{
 				Verbosity = std::stoi(*value);
 			}
+
+			if (amazonConfig.TryGetValue("RefreshRate", &value))
+			{
+				RefreshRate = std::stoi(*value);
+			}
+
+			if (amazonConfig.TryGetValue("Debug", &value))
+			{
+				if (*value == oneStr)
+				{
+					Debug = true;
+				}
+			}
 		}
 		printf("[AmazonHook] Detouring Direct3DCreate9 %p\n", &ODirect3DCreate9);
 		DetourTransactionBegin();
@@ -338,6 +448,34 @@ namespace AmazonHook::Vtea
 
 		f00b700a0 = (FUN_00b700a0)(MainModule::baseAddress + 0x00b700a0 - 0x400C00);
 		f00b700b0 = (FUN_00b700b0)(MainModule::baseAddress + 0x00b700b0 - 0x400C00);
+		f00b69190 = (FUN_00b69190)(MainModule::baseAddress + 0x00b69190 - 0x400C00);
+
+		f5C32A0 = (FUN_5C32A0)(MainModule::baseAddress + 0x5C32A0);
+		f6F5CD0 = (FUN_6F5CD0)(MainModule::baseAddress + 0x6F5CD0);
+
+		if (Debug)
+		{
+			printf("[DivaImGui] Detouring Sleep %p\n", OSleep);
+			DetourTransactionBegin();
+			DetourUpdateThread(GetCurrentThread());
+			DetourAttach(&(PVOID&)OSleep, (PVOID)FSleep);
+			DetourTransactionCommit();
+
+			printf("[AmazonHook] Detouring 5C32A0  %p\n", f5C32A0);
+			DetourTransactionBegin();
+			DetourUpdateThread(GetCurrentThread());
+			DetourAttach(&(PVOID&)f5C32A0, (PVOID)FUN5C32A0);
+			DetourTransactionCommit();
+		}
+
+		if (Scaling == 3)
+		{
+			printf("[AmazonHook] Detouring 00b69190 %p\n", f00b700b0);
+			DetourTransactionBegin();
+			DetourUpdateThread(GetCurrentThread());
+			DetourAttach(&(PVOID&)f00b69190, (PVOID)FUN00b69190);
+			DetourTransactionCommit();
+		}
 
 		if ((Scaling == 2) || ((!Windowed) && (Scaling == 1)))
 		{
