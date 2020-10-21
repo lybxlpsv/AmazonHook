@@ -64,6 +64,9 @@ namespace AmazonHook::Vtea
 	static int Verbosity = 0;
 	static int RefreshRate = 60;
 
+	static int WindowedWidth = -1;
+	static int WindowedHeight = -1;
+
 	static WNDPROC oWndProc;
 	bool print = false;
 
@@ -235,14 +238,24 @@ namespace AmazonHook::Vtea
 		/* This... always seems to set an error, even though it works? idk */
 		SetWindowLongW(hwnd, GWL_STYLE, style);
 
-		ok = SetWindowPos(
+		/*ok = SetWindowPos(
 			hwnd,
 			HWND_TOP,
 			rect.left,
 			rect.top,
 			rect.right - rect.left,
 			rect.bottom - rect.top,
+			SWP_FRAMECHANGED | SWP_NOMOVE);*/
+
+		ok = SetWindowPos(
+			hwnd,
+			HWND_TOP,
+			0,
+			0,
+			WindowedWidth,
+			WindowedHeight,
 			SWP_FRAMECHANGED | SWP_NOMOVE);
+
 
 		if (!ok)
 		{
@@ -295,6 +308,28 @@ namespace AmazonHook::Vtea
 		if (Frame && Windowed)
 		{
 			gfx_frame_window(hFocusWindow);
+		}
+		else {
+
+			if (Windowed)
+			{
+				auto ok = SetWindowPos(
+					hFocusWindow,
+					HWND_TOP,
+					0,
+					0,
+					WindowedWidth,
+					WindowedHeight,
+					SWP_FRAMECHANGED | SWP_NOMOVE);
+
+				if (!ok)
+				{
+					auto hr = HRESULT_FROM_WIN32(GetLastError());
+					printf("[AmazonHook] SetWindowPos(%p) failed: %x\n", hFocusWindow, (int)hr);
+
+					return hr;
+				}
+			}
 		}
 
 		MainModule::WindowHandle = hFocusWindow;
@@ -432,6 +467,16 @@ namespace AmazonHook::Vtea
 				RefreshRate = std::stoi(*value);
 			}
 
+			if (amazonConfig.TryGetValue("WindowedWidth", &value))
+			{
+				WindowedWidth = std::stoi(*value);
+			}
+
+			if (amazonConfig.TryGetValue("WindowedHeight", &value))
+			{
+				WindowedHeight = std::stoi(*value);
+			}
+
 			if (amazonConfig.TryGetValue("Debug", &value))
 			{
 				if (*value == oneStr)
@@ -440,6 +485,22 @@ namespace AmazonHook::Vtea
 				}
 			}
 		}
+
+		RECT desktop;
+		const HWND hDesktop = GetDesktopWindow();
+		// Get the size of screen to the variable desktop
+		GetWindowRect(hDesktop, &desktop);
+
+		if (WindowedWidth == -1)
+		{
+			WindowedWidth = desktop.right;
+		}
+
+		if (WindowedHeight == -1)
+		{
+			WindowedHeight = desktop.bottom;
+		}
+
 		printf("[AmazonHook] Detouring Direct3DCreate9 %p\n", &ODirect3DCreate9);
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
